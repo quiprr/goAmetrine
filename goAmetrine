@@ -1,0 +1,216 @@
+#!/bin/bash
+# Ametrine's multipurpose iOS/macOS development utility. Find us as https://ametrine.dev/.
+
+# Check if user is root
+if [ "$EUID" -ne 0 ]; then 
+echo "Script not running as root, aborted."
+echo "Please run the script as root and try again."
+exit
+else 
+
+# Check for help argument (-h)
+if [ "$1" == -h ]; then 
+    echo "goAmetrine development tool usage:"
+    echo ""
+    echo "Help:"
+    echo "-h = Show this help message"
+    echo ""
+    echo "Utilities:"
+    echo "-r = Restore RootFS on device (depends wget or curl)"
+    echo "-R = Restore RootFS off device over USB (depends ssh/iproxy/wget or curl)"
+    echo "-o = Deploy odysseyra1n to jailbroken device (depends libusbmuxd-tools/curl/iproxy/ssh)"
+    echo "-e = Export diagnostic log"
+    echo ""
+    echo "Shortcuts:"
+    echo "-u = Reboot the userspace (depends a jailbreak that supports it)"
+    exit 1
+fi
+
+if [ "$1" == -r ]; then
+    # Script guaranteed to be ran as root already, so we'll skip that check.
+    echo "Hello, I'm goAmetrine, and I'll help you Restore RootFS on device."
+    echo ""
+
+    # Try to fetch the snappy binary with wget
+    echo "Downloading snappy binary with wget..."
+    wget https://ametrine.dev/bin/snappy
+    if [ "$?" == 0 ]; then
+        echo "Done!"
+    else
+        echo "wget failed to download the snappy binary. Falling back to cURL..."
+        apt install curl
+        curl -sSL https://ametrine.dev/bin/snappy -o /bin/snappy
+        if [ "$?" == 0 ]; then
+            echo "Done!"
+        else
+            echo "cURL has failed to download the snappy binary. Please manually install cURL or wget. (Error code: -1)"
+            exit 1
+        fi
+    fi
+    echo ""
+
+    # Edit snappy permissions
+    echo "Editing snappy permissions..."
+    chmod 755 snappy
+    if [ $? == 0 ]; then
+        echo "Done!"
+    else
+        echo "chmod failed to edit the snappy permissions. Please ensure the binary is in the working directory, then try again. (Error code: -2)"
+        exit 1
+    fi
+    echo ""
+
+    # Run snappy to snapback to orig-fs
+    echo "Restoring RootFS..."
+    snappy -f / -r orig-fs -x
+    if [ $? == 0 ]; then
+        echo "Done!"
+    else
+        echo "Snappy failed to remount orig-fs. Please reboot and try again. (Error code: -3)"
+        exit 1
+    fi
+    echo ""
+
+    # Reboot the device
+    reboot
+    # Ignoring error checking as this cannot fail
+        
+    # Exit the script for good syntax
+    exit 1
+fi
+if [ "$1" == -R ]; then
+    # Script guaranteed to be ran as root already, so we'll skip that check.
+    echo "Hello, I'm goAmetrine, and I'll help you Restore RootFS off device."
+    echo "Please ensure SSH is enabled, or this will not work."
+    echo ""
+    
+    # Create iproxy script to scp/ssh
+    echo "Creating iproxy script..."
+    echo #!/bin/bash >> ametrine-rrfs.sh
+    echo iproxy 2222 22 >> ametrine-rrfs.sh
+    echo exit >> ametrine-rrfs.sh
+    echo "Done!"
+    echo ""
+    
+    # Download the snappy binary locally since this should be ran if curl/wget/apt are broken on host device
+    echo "Downloading snappy binary with wget..."
+    wget https://ametrine.dev/bin/snappy
+    if [ "$?" == 0 ]; then
+        echo "Done!"
+    else
+        echo "wget failed to download the snappy binary. Falling back to cURL..."
+        apt install curl
+        curl -sSL https://ametrine.dev/bin/snappy -o snappy
+        if [ "$?" == 0 ]; then
+            echo "Done!"
+        else
+            echo "cURL has failed to download the snappy binary. Please manually install cURL or wget. (Error code: -1)"
+            exit 1
+        fi
+    fi
+    echo ""
+
+    # Launch the iproxy script
+    echo "Launching iproxy script..."
+    ./ametrine-rrfs.sh
+    echo "Done!"
+
+    # Use scp to move the snappy binary
+    echo "Moving the snappy binary to the device..."
+    echo "Default password is 'alpine'"
+    scp snappy root@127.0.0.1:2222:/bin/snappy
+    echo "Done!"
+    echo ""
+
+    # Edit snappy permissions
+    echo "Editing snappy permissions..."
+    echo "Default password is 'alpine'"
+    ssh -p2222 -o "StrictHostKeyChecking no" -o "UserKnownHostsFile=/dev/null" root@127.0.0.1 "chmod 755 /bin/snappy"
+    echo "Done!"
+    echo ""
+
+    # Remount orig-fs with snappy
+    echo "Restoring RootFS with snappy..."
+    echo "Default password is 'alpine'"
+    ssh -p2222 -o "StrictHostKeyChecking no" -o "UserKnownHostsFile=/dev/null" root@127.0.0.1 "snappy -f / -r orig-fs -x"
+    echo "Done!"
+    echo ""
+
+    # Reboot device
+    echo "Rebooting device..."
+    echo "Default password is 'alpine'"
+    ssh -p2222 -o "StrictHostKeyChecking no" -o "UserKnownHostsFile=/dev/null" root@127.0.0.1 "reboot"
+    echo "Done!"
+    echo ""
+
+    # Kill iproxy script
+    echo "Killing iproxy script..."
+    killall iproxy
+    echo "Done!"
+    echo ""
+
+    # Delete snappy binary and iproxy script
+    echo "Deleting snappy binary and iproxy script..."
+    rm ametrine-rrfs.sh
+    rm snappy
+    echo "Done!"
+    echo ""
+
+    # Exit script for syntax
+    exit 1
+fi
+if [ "$1" == -o ]; then
+    # Install libusbmuxd-tools
+    echo "Installing libusbmuxd-tools..."
+    apt install libusbmuxd-tools
+    echo "Done!"
+
+    # Download the odysseyra1n script via curl and execute
+    echo "Downloading latest odysseyra1n deployment script.."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/coolstar/Odyssey-bootstrap/master/procursus-deploy-linux-macos.sh)"
+    echo "Done!"
+
+    # Exit the script
+    exit 1
+fi
+if [ "$1" == -e ]; then
+    # Store date and time in variable for filename
+    dt=$(date +"%m-%d-%Y_%T")
+    
+    # Make directory for logs to be stored
+    mkdir /var/mobile/Documents/goAmetrine/logs/
+
+    # Create file with initial info
+    uname -a >> /var/mobile/Documents/goAmetrine/logs/goAmetrine_log_$dt.log
+
+    # Ensure permissions are good for file
+    chmod 755 /var/mobile/Documents/goAmetrine/logs/goAmetrine_log_$dt.log
+
+    # Export 'dpkg -l' to file
+    echo "" >> /var/mobile/Documents/goAmetrine/logs/goAmetrine_log_$dt.log
+    echo "dpkg-ip:" >> /var/mobile/Documents/goAmetrine/logs/goAmetrine_log_$dt.log
+    dpkg -l >> /var/mobile/Documents/goAmetrine/logs/goAmetrine_log_$dt.log
+
+    # Export 'apt list' to file
+    echo "" >> /var/mobile/Documents/goAmetrine/logs/goAmetrine_log_$dt.log
+    echo "apt-list:" >> /var/mobile/Documents/goAmetrine/logs/goAmetrine_log_$dt.log
+    apt list >> /var/mobile/Documents/goAmetrine/logs/goAmetrine_log_$dt.log
+
+    # Give user path to log
+    echo ""
+    echo "goAmetrine has saved your diagnostic log. It is located at:"
+    echo "${RED}/var/mobile/Documents/goAmetrine/logs/goAmetrine_log_$dt.log"
+
+    # Exit the script
+    exit 1
+fi
+if [ "$1" == -u ]; then
+    # Reboot the userspace
+    launchctl reboot userspace
+
+    # Exit script
+    exit 1
+fi
+echo "goAmetrine cannot find the command you specified."
+echo "Try running 'ametrine -h' for help."
+exit 1
